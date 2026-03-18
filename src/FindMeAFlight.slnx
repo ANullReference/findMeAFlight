@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Core/">
+    <Project Path="Core\\Core.csproj" Type="Classic C#" />
+  </Folder>
+  <Folder Name="/FindMeAFlight/">
+    <Project Path="FindMeAFlight\\FindMeAFlight.csproj" Type="Classic C#" />
+  </Folder>
+</Solution>

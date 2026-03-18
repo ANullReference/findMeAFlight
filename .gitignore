@@ -1,0 +1,45 @@
+# User-specific files
+*.suo
+*.user
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+[Bb]in/
+[Oo]bj/
+
+# NuGet Packages
+*.nupkg
+**/packages/*
+# except build/, which is used as an MSBuild target
+!**/packages/build/
+
+# Visual Studio files
+.vs/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.psess
+*.vsp
+*.vspx
+*.pidb
+*.svclog
+*.scc
+
+# Temporary files and logs
+*.tmp
+*.log
+
+# Rider (JetBrains IDE)
+_ReSharper*/
+*[Rr]e[Ss]harper.
+*.DotSettings.user
+.idea/  # For Rider
+
+# Other common exclusions
+publish/
+[Ee]xpress/

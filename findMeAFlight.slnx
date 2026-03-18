@@ -1,0 +1,5 @@
+<Solution>
+    <Project Path="Infrastructure/Infrastructure.csproj" Id="d6b70733-3fb8-418d-ac38-06ed4eca4828" />
+    <Project Path="src/Core/Core.csproj" />
+    <Project Path="src/FindMeAFlight/FindMeAFlight.csproj" />
+</Solution>
