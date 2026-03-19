@@ -43,3 +43,6 @@ _ReSharper*/
 # Other common exclusions
 publish/
 [Ee]xpress/
+
+
+.env

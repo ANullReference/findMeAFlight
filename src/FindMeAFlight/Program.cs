@@ -1,7 +1,7 @@
 ﻿using Core;
 using Core.Abstractions;
-using Infrastructure.Extensions;
 using Infrastructure.UserCommands;
+using Infrastructure.UserCommands.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -28,7 +28,7 @@ class Program
         {
             registrar = new TypeRegistrar(services);
             services.AddSingleton<IServiceManager, ServiceManager>();
-            services.AddScoped<IUserCommand, UserCommands>();
+            services.AddScoped<IUserCommand, UserCommand>();
         })
         .UseSerilog()
         .Build();

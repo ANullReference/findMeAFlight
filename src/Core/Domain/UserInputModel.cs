@@ -5,7 +5,7 @@
 namespace Core.Domain;
 
 public class UserInputModel
-{   
+{
     public string FromAirport { get; set; } = string.Empty;
     public string ToAirport { get; set; } = string.Empty;
 }
