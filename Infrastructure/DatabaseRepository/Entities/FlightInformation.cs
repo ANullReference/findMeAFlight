@@ -2,9 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System;
-using System.Collections.Generic;
-using System.Text;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Infrastructure.DatabaseRepository.Entities;
 
@@ -15,6 +13,7 @@ public class FlightInformation
     public string Airline { get; set; } = string.Empty;
     public string DepartureAirport { get; set; } = string.Empty;
     public string ArrivalAirport { get; set; } = string.Empty;
+    [Column(TypeName = "decimal(18, 6)")] // Explicitly sets the SQL column type
     public decimal Price { get; set; }
     public string Description { get; set; } = string.Empty;
     public int LayOver { get; set; }

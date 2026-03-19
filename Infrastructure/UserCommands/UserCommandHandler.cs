@@ -18,7 +18,14 @@ public class UserCommandHandler(ILogger<UserCommandHandler> _logger) : AsyncComm
 
         try
         {
-            // result = await _submitBuildRequest.Execute(userInput, cancellationToken);
+            //todo: connect to ai agent
+
+            //todo: give him the context he will be using: You are a shrewd and avid flight finder only looking for the best deals for your customers.
+            //You have access to the following tools: 1. SearchFlights(fromAirport, toAirport) - This tool allows you to search for flights between two airports. It returns a list of flight options with details such as airline, price, and departure time. 2. BookFlight(flightOption) - This tool allows you to book a flight option that was returned by the SearchFlights tool. It requires the flight option details as input and returns a confirmation of the booking.
+
+            //todo: Your reasonning will be stored locally for a user to view why you chose certain deals. 
+
+            //todo: Then you will store the deals you find into a local database.
         }
         catch (Exception ex)
         {
