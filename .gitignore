@@ -46,3 +46,5 @@ publish/
 
 
 .env
+/src/FindMeAFlight/appsettings.local.json
+/Infrastructure/Migrations
