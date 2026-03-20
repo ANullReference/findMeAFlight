@@ -4,6 +4,7 @@
 
 using Core;
 using Core.Abstractions;
+using Core.Domain;
 using Infrastructure.DatabaseRepository;
 using Infrastructure.UserCommands;
 using Infrastructure.UserCommands.Extensions;
@@ -33,7 +34,8 @@ class Program
         IConfiguration config = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json")
-            .AddJsonFile("appsettings.local.json")
+            .AddJsonFile("appsettings.local.json", optional: true)
+            .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "prod"}.json", optional: true)
             .Build();
 
         using IHost host = Host.CreateDefaultBuilder(args)
@@ -42,6 +44,7 @@ class Program
             registrar = new TypeRegistrar(services);
             services.AddSingleton<IServiceManager, ServiceManager>();
             services.AddScoped<IUserCommand, UserCommand>();
+            services.Configure<AppSettings>(config);
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(config["ConnectionStrings:DefaultConnection"]));
