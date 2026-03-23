@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FindMeAFlight": {
+      "commandName": "Project",
+      "commandLineArgs": "-f YUL\r\n -t NRT \r\n -d 2026-01-01 \r\n -c CAD \r\n -m 9200.00 \r\n "
+    }
+  }
+}

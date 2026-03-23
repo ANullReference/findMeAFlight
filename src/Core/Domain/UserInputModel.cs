@@ -8,4 +8,8 @@ public class UserInputModel
 {
     public string FromAirport { get; set; } = string.Empty;
     public string ToAirport { get; set; } = string.Empty;
+    public string DepartureDate { get; set; } = string.Empty;
+    public string Currency { get; set; } = "CAD";
+    public string ReturnDate { get; set; } = string.Empty;
+    public decimal MaxPrice { get; set; } = decimal.MaxValue;
 }

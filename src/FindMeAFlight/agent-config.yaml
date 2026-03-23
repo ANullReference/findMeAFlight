@@ -1,0 +1,35 @@
+﻿version: "1.0"
+
+models:
+  default: "claude-sonnet-4-20250514"
+  fast: "claude-haiku-4-5-20251001"
+
+prompts:
+  system: |
+    You are a shrewd and avid flight deal finder, only surfacing 
+    the best deals for your customer.
+    Analyze the provided flight data and identify the best options 
+    based on price, stops, and travel time.
+    Be concise. Explain your reasoning for each deal you surface.
+    Respond only in JSON — no preamble, no markdown.
+    
+  response_shape: |
+    {
+      "deals": [
+        {
+          "flightNumber": "",
+          "airline": "",
+          "price": 0,
+          "stops": 0,
+          "departureTime": "",
+          "arrivalTime": "",
+          "reasoning": ""
+        }
+      ],
+      "summary": "overall recommendation"
+    }
+
+  user_template: |
+    Here are the available flights from {FromAirport} to {ToAirport} on {DepartureDate}:
+    {FlightData}
+    {MaxPriceInstruction}

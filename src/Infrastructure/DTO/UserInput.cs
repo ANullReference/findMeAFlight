@@ -10,22 +10,40 @@ namespace Infrastructure.DTO;
 
 public class UserInput : CommandSettings
 {
-
     [CommandOption("-f|--from")]
-    [Description("From Flight")]
+    [Description("Departure airport IATA code (e.g. YUL)")]
     public string FromAirport { get; set; } = string.Empty;
 
     [CommandOption("-t|--to")]
-    [Description("To Flight")]
+    [Description("Arrival airport IATA code (e.g. NRT)")]
     public string ToAirport { get; set; } = string.Empty;
 
+    [CommandOption("-d|--date")]
+    [Description("Departure date (yyyy-MM-dd)")]
+    public string DepartureDate { get; set; } = string.Empty;
+
+    [CommandOption("-r|--return")]
+    [Description("Return date (yyyy-MM-dd) — omit for one-way")]
+    public string? ReturnDate { get; set; } = string.Empty;
+
+    [CommandOption("-m|--max-price")]
+    [Description("Alert threshold — only surface deals below this price")]
+    public decimal MaxPrice { get; set; } = decimal.MaxValue;
+
+    [CommandOption("-c|--currency")]
+    [Description("Currency code (default: CAD)")]
+    public string Currency { get; set; } = "CAD";
 
     public UserInputModel ToUserinput()
     {
         return new UserInputModel
         {
             FromAirport = this.FromAirport,
-            ToAirport = this.ToAirport
+            ToAirport = this.ToAirport,
+            Currency = this.Currency,
+            DepartureDate = this.DepartureDate,
+            ReturnDate = this.ReturnDate,
+            MaxPrice = this.MaxPrice
         };
     }
 }

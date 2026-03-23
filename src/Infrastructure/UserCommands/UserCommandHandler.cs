@@ -2,57 +2,19 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Globalization;
+using System.Text.Json.Serialization;
+using Core.Abstractions;
 using Core.Domain;
 using Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using Spectre.Console.Cli;
 
 namespace Infrastructure.UserCommands;
 
-/*
- 
-
-The app: findMeAFlight — C# console app that searches for flights and alerts you when a price is interesting.
-Tech stack:
-
-.NET 10, Console app
-Spectre.Console for CLI
-EF Core + SQL Server
-Serilog
-Amadeus API for flight data (free tier, ~2000 calls/month, you'll use ~150)
-Anthropic/Claude as the AI agent brain
-
-Architecture — two projects:
-
-Core — ServiceManager, UserInputModel, ResponseObject<T>, AppSettings
-Infrastructure — Program.cs, UserCommandHandler, ApplicationDbContext, FlightInformation, PromptHistory, Spectre.Console wiring
-
-Where you left off:
-
-AppSettings needs AmadeusSettings added (BaseUrl, ClientId, ClientSecret)
-Config strategy agreed: appsettings.json → appsettings.local.json → appsettings.prod.json, driven by DOTNET_ENVIRONMENT
-IServiceManager interface doesn't exist yet — blocking
-AmadeusService not built yet — next big piece
-UserInput needs DepartureDate, ReturnDate?, MaxPrice? added
-
-Next coding steps in order:
-
-Update AppSettings with Amadeus config
-Create IServiceManager + IAmadeusService in Core.Abstractions
-Build AmadeusService — OAuth2 token caching + flight search
-Update UserInput / UserInputModel with date and price fields
-Wire Claude tool-use loop into UserCommandHandler
-Persist flights + reasoning to DB
-
-Test vs Prod Amadeus: Same endpoints, swap base URL and credentials. Test has real data but non-live prices. Prod requires a quick approval. Just an env var swap.
-
-See you tomorrow.
- 
- */
-
-
-public class UserCommandHandler(IOptions<AppSettings> options, ILogger<UserCommandHandler> logger) : AsyncCommand<UserInput>
+public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agentConfig, ILogger<UserCommandHandler> logger, IFlightService flightService, IHttpClientFactory httpClientFactory) : AsyncCommand<UserInput>
 {
     /// <summary>
     /// Executes the flight deal search and booking operation asynchronously using the provided command context and user
@@ -68,13 +30,50 @@ public class UserCommandHandler(IOptions<AppSettings> options, ILogger<UserComma
     /// execution.</returns>
     public async override Task<int> ExecuteAsync(CommandContext context, UserInput settings, CancellationToken cancellationToken)
     {
-        UserInputModel userInput = settings.ToUserinput();
-        int result = 0;
-
         try
         {
+            ValidateArgs(settings); // just throw exceptions if validation fails, we will catch them in the main method and log them.
+
+            UserInputModel userInput = settings.ToUserinput();
+            int result = 0;
+
             AppSettings appSettings = options.Value;
+
+            // 1. Search for flights
+            var searchResult = await flightService.SearchFlightsAsync(userInput);
+
+            if (!searchResult.Success || searchResult.Data == null)
+            {
+                logger.LogError("Flight search failed: {Message}", searchResult.Message);
+                return -1;
+            }
+
+            JsonSerializerSettings jsonSettings = new()
+            {
+                Formatting = Formatting.Indented,
+                NullValueHandling = NullValueHandling.Ignore
+            };
+
+            string flightJson = JsonConvert.SerializeObject(searchResult.Data, jsonSettings);
+
+            var toonSerialized = ToonSharp.ToonSerializer.Serialize(flightJson);
+
             //todo: connect to ai agent
+            //string systemPrompt = agentConfig.Prompts.System;
+
+            HttpClient client = httpClientFactory.CreateClient("AiUrl");
+            ChatRequest requestBody = new ChatRequest();
+
+            requestBody.System = agentConfig.Prompts.System;
+
+            //Set up initial context
+            requestBody.Messages.Add(new Message() { Role = "User", Content = toonSerialized });
+            string requestBodyInString = JsonConvert.SerializeObject(JsonConvert.SerializeObject(requestBody, jsonSettings));
+            HttpContent httpContent = new StringContent(requestBodyInString, System.Text.Encoding.UTF8, "application/json");
+
+            HttpResponseMessage response = await client.PostAsync(appSettings.AiAgentSettings.PostLink, httpContent);
+
+
 
             //todo: give him the context he will be using: You are a shrewd and avid flight finder only looking for the best deals for your customers.
             //You have access to the following tools: 1. SearchFlights(fromAirport, toAirport) - This tool allows you to search for flights between two airports. It returns a list of flight options with details such as airline, price, and departure time. 2. BookFlight(flightOption) - This tool allows you to book a flight option that was returned by the SearchFlights tool. It requires the flight option details as input and returns a confirmation of the booking.
@@ -85,9 +84,55 @@ public class UserCommandHandler(IOptions<AppSettings> options, ILogger<UserComma
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error occured when generating build request manifest");
+            logger.LogError(ex, "Error occured. Verify Validation is correct.");
         }
 
         return await Task.FromResult(-1);
+    }
+
+    private bool ValidateArgs(UserInput userInput)
+    {
+        const string dateFormat = "yyyy-MM-dd";
+
+        ArgumentNullException.ThrowIfNull(userInput);
+        ArgumentException.ThrowIfNullOrEmpty(userInput.FromAirport, nameof(userInput.FromAirport));
+        ArgumentException.ThrowIfNullOrEmpty(userInput.ToAirport, nameof(userInput.ToAirport));
+        ArgumentException.ThrowIfNullOrEmpty(userInput.Currency, nameof(userInput.Currency));
+
+        if (!DateTime.TryParseExact(userInput.DepartureDate, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        {
+            throw new ArgumentException("Invalid departure date format. Expected format: yyyy-MM-dd", nameof(userInput.DepartureDate));
+        }
+
+        if (!string.IsNullOrEmpty(userInput.ReturnDate) && !DateTime.TryParseExact(userInput.ReturnDate, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        {
+            throw new ArgumentException("Invalid return date format. Expected format: yyyy-MM-dd", nameof(userInput.ReturnDate));
+        }
+
+        return true; // Return true if validation passes, false otherwise
+    }
+
+    private class ChatRequest
+    {
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = "claude-sonnet-4-20250514";
+
+        [JsonPropertyName("max_tokens")]
+        public int MaxTokens { get; set; } = 1024;
+
+        [JsonPropertyName("system")]
+        public string System { get; set; } = string.Empty;
+
+        [JsonPropertyName("messages")]
+        public List<Message> Messages { get; set; } = new();
+    }
+
+    private class Message
+    {
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = string.Empty;
+
+        [JsonPropertyName("content")]
+        public string Content { get; set; } = string.Empty;
     }
 }

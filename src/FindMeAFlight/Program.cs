@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using Core;
 using Core.Abstractions;
 using Core.Domain;
+using Infrastructure;
 using Infrastructure.DatabaseRepository;
 using Infrastructure.UserCommands;
 using Infrastructure.UserCommands.Extensions;
@@ -14,6 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Spectre.Console.Cli;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 class Program
 {
@@ -38,16 +40,31 @@ class Program
             .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "prod"}.json", optional: true)
             .Build();
 
+        var deserializer = new DeserializerBuilder()
+            .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .Build();
+
+        string yaml = File.ReadAllText("agent-config.yaml");
+        AgentConfig agentConfig = deserializer.Deserialize<AgentConfig>(yaml);
+
         using IHost host = Host.CreateDefaultBuilder(args)
         .ConfigureServices((context, services) =>
         {
             registrar = new TypeRegistrar(services);
-            services.AddSingleton<IServiceManager, ServiceManager>();
+            services.AddSingleton<IFlightService, FlightService>();
             services.AddScoped<IUserCommand, UserCommand>();
             services.Configure<AppSettings>(config);
+            services.AddSingleton(agentConfig);
+
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(config["ConnectionStrings:DefaultConnection"]));
+
+            services.AddHttpClient("AiUrl", client =>
+            {
+                client.BaseAddress = new Uri(config.GetValue<string>("AiAgent:BaseUrl") ?? string.Empty);
+                client.DefaultRequestHeaders.Add("User-Agent", "FindAFlight");
+            }).AddHttpMessageHandler<CustomMessageHandler>();
         })
         .UseSerilog()
         .Build();
@@ -60,7 +77,6 @@ class Program
         try
         {
             CommandApp<UserCommandHandler> app = new(registrar);
-
             result = await app.RunAsync(args);
         }
         catch (Exception ex)
