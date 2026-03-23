@@ -29,7 +29,14 @@ prompts:
       "summary": "overall recommendation"
     }
 
+
   user_template: |
     Here are the available flights from {FromAirport} to {ToAirport} on {DepartureDate}:
     {FlightData}
     {MaxPriceInstruction}
+
+tools:
+  - name: "search_flights"
+    description: "Search for flights between two airports on a given date."
+  - name: "save_deal"
+    description: "Save a flight deal to the local database."

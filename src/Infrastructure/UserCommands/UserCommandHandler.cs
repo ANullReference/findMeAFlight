@@ -62,18 +62,25 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             //string systemPrompt = agentConfig.Prompts.System;
 
             HttpClient client = httpClientFactory.CreateClient("AiUrl");
-            ChatRequest requestBody = new ChatRequest();
+            ChatRequest requestBody = new();
 
             requestBody.System = agentConfig.Prompts.System;
 
             //Set up initial context
             requestBody.Messages.Add(new Message() { Role = "User", Content = toonSerialized });
-            string requestBodyInString = JsonConvert.SerializeObject(JsonConvert.SerializeObject(requestBody, jsonSettings));
-            HttpContent httpContent = new StringContent(requestBodyInString, System.Text.Encoding.UTF8, "application/json");
 
-            HttpResponseMessage response = await client.PostAsync(appSettings.AiAgentSettings.PostLink, httpContent);
+            while (true)
+            {
+                string requestBodyInString = JsonConvert.SerializeObject(JsonConvert.SerializeObject(requestBody, jsonSettings));
+                HttpContent httpContent = new StringContent(requestBodyInString, System.Text.Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PostAsync(appSettings.AiAgentSettings.PostLink, httpContent, cancellationToken);
 
 
+            }
+
+
+            //string toolDefinition = string.Format("In Terms of tools you have the following tool: to search 1) '{0}' which uses this as a model input: '{}'", "search_flights", JsonConvert.SerializeObject(new UserInputModel()));
 
             //todo: give him the context he will be using: You are a shrewd and avid flight finder only looking for the best deals for your customers.
             //You have access to the following tools: 1. SearchFlights(fromAirport, toAirport) - This tool allows you to search for flights between two airports. It returns a list of flight options with details such as airline, price, and departure time. 2. BookFlight(flightOption) - This tool allows you to book a flight option that was returned by the SearchFlights tool. It requires the flight option details as input and returns a confirmation of the booking.
@@ -89,6 +96,41 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
 
         return await Task.FromResult(-1);
     }
+
+
+    private object GetSchemaForTool(string name) => name switch
+    {
+        "search_flights" => new
+        {
+            type = "object",
+            properties = new
+            {
+                from_airport = new { type = "string", description = "IATA code e.g. YUL" },
+                to_airport = new { type = "string", description = "IATA code e.g. NRT" },
+                departure_date = new { type = "string", description = "yyyy-MM-dd" },
+                return_date = new { type = "string", description = "yyyy-MM-dd, empty if one-way" },
+                currency = new { type = "string", description = "e.g. CAD, USD" },
+                max_price = new { type = "number", description = "Maximum price filter" }
+            },
+            required = new[] { "from_airport", "to_airport", "departure_date" }
+        },
+        "save_deal" => new
+        {
+            type = "object",
+            properties = new
+            {
+                airline = new { type = "string" },
+                price = new { type = "number" },
+                departure_time = new { type = "string" },
+                arrival_time = new { type = "string" },
+                stops = new { type = "number" },
+                reasoning = new { type = "string", description = "Why this is a good deal" }
+            },
+            required = new[] { "airline", "price", "departure_time", "arrival_time", "reasoning" }
+        },
+        _ => new { type = "object", properties = new { } }
+    };
+
 
     private bool ValidateArgs(UserInput userInput)
     {
