@@ -3,13 +3,13 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Globalization;
-using System.Text.Json.Serialization;
 using Core.Abstractions;
 using Core.Domain;
 using Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Spectre.Console.Cli;
 
 namespace Infrastructure.UserCommands;
@@ -40,7 +40,7 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             AppSettings appSettings = options.Value;
 
             // 1. Search for flights
-            var searchResult = await flightService.SearchFlightsAsync(userInput);
+            ResponseObject<FlightOffer[]> searchResult = await flightService.SearchFlightsAsync(userInput);
 
             if (!searchResult.Success || searchResult.Data == null)
             {
@@ -54,9 +54,8 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 NullValueHandling = NullValueHandling.Ignore
             };
 
-            string flightJson = JsonConvert.SerializeObject(searchResult.Data, jsonSettings);
-
-            var toonSerialized = ToonSharp.ToonSerializer.Serialize(flightJson);
+            string flightJson = ToonSharp.ToonSerializer.Serialize(searchResult.Data);
+            //string toonSerialized = ToonSharp.ToonSerializer.Serialize(flightJson);
 
             //todo: connect to ai agent
             //string systemPrompt = agentConfig.Prompts.System;
@@ -64,20 +63,95 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             HttpClient client = httpClientFactory.CreateClient("AiUrl");
             ChatRequest requestBody = new();
 
-            requestBody.System = agentConfig.Prompts.System;
+            List<Message> messages = [new() { Role = "user", Content = $"Flights in TOON data format:{flightJson}]" }];
+
+            //requestBody.System = agentConfig.Prompts.System;
 
             //Set up initial context
-            requestBody.Messages.Add(new Message() { Role = "User", Content = toonSerialized });
+            //requestBody.Messages = messages;
+
+            // 2. Build tool list from your agentConfig YAML
+            var tools = agentConfig.Tools.Select(t => new Tool
+            {
+                Name = t.Name,
+                Description = t.Description,
+                InputSchema = GetSchemaForTool(t.Name)
+            }).ToList();
 
             while (true)
             {
-                string requestBodyInString = JsonConvert.SerializeObject(JsonConvert.SerializeObject(requestBody, jsonSettings));
+                requestBody = new ChatRequest
+                {
+                    System = agentConfig.Prompts.System,
+                    Tools = tools,
+                    Messages = messages
+                };
+
+                string requestBodyInString = JsonConvert.SerializeObject(requestBody, jsonSettings);
+
+
+                logger.LogInformation("Request body:\n{Body}", requestBodyInString);
+
                 HttpContent httpContent = new StringContent(requestBodyInString, System.Text.Encoding.UTF8, "application/json");
 
                 HttpResponseMessage response = await client.PostAsync(appSettings.AiAgentSettings.PostLink, httpContent, cancellationToken);
 
+                string raw = await response.Content.ReadAsStringAsync(cancellationToken);
+                ClaudeResponse? claudeReply = JsonConvert.DeserializeObject<ClaudeResponse?>(raw);
 
+                if (claudeReply is null)
+                {
+                    logger.LogError("Null response from Claude.");
+                    return -1;
+                }
+
+                // Add Claude's reply to history
+                messages.Add(new Message { Role = "assistant", Content = claudeReply.Content });
+
+
+                // Check stop reason
+                if (claudeReply.StopReason == "end_turn")
+                {
+                    var finalText = claudeReply.Content
+                        .Where(b => b.Type == "text")
+                        .Select(b => b.Text)
+                        .FirstOrDefault();
+
+                    logger.LogInformation("Claude final response:\n{Response}", finalText);
+                    // TODO: deserialize finalText into your response_shape and save
+                    break;
+                }
+
+                if (claudeReply.StopReason == "tool_use")
+                {
+                    List<ToolResultContent> toolResults = [];
+
+                    foreach (var block in claudeReply.Content.Where(b => b.Type == "tool_use"))
+                    {
+                        string resultJson = block.Name switch
+                        {
+                            "search_flights" => await HandleSearchFlights(block.Input, jsonSettings),
+                            "save_deal" => await HandleSaveDeal(block.Input, jsonSettings),
+                            _ => JsonConvert.SerializeObject(new { error = "Unknown tool" })
+                        };
+
+                        toolResults.Add(new ToolResultContent
+                        {
+                            Type = "tool_result",
+                            ToolUseId = block.Id,
+                            Content = resultJson
+                        });
+                    }
+
+                    // Feed results back as next user message
+                    messages.Add(new Message { Role = "user", Content = toolResults.Cast<object>() });
+                }
             }
+
+            return 0;
+
+
+
 
 
             //string toolDefinition = string.Format("In Terms of tools you have the following tool: to search 1) '{0}' which uses this as a model input: '{}'", "search_flights", JsonConvert.SerializeObject(new UserInputModel()));
@@ -97,6 +171,32 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
         return await Task.FromResult(-1);
     }
 
+
+
+    private async Task<string> HandleSearchFlights(JObject? input, JsonSerializerSettings jsonSettings)
+    {
+        var refinedInput = new UserInputModel
+        {
+            FromAirport = input?["from_airport"]?.ToString() ?? string.Empty,
+            ToAirport = input?["to_airport"]?.ToString() ?? string.Empty,
+            DepartureDate = input?["departure_date"]?.ToString() ?? string.Empty,
+            ReturnDate = input?["return_date"]?.ToString() ?? string.Empty,
+            Currency = input?["currency"]?.ToString() ?? "CAD",
+            MaxPrice = decimal.TryParse(input?["max_price"]?.ToString(), out var mp) ? mp : decimal.MaxValue
+        };
+
+        ResponseObject<FlightOffer[]> result = await flightService.SearchFlightsAsync(refinedInput);
+        return result.Success
+            ? ToonSharp.ToonSerializer.Serialize(result.Data)
+            : ToonSharp.ToonSerializer.Serialize(new { error = result.Message });
+    }
+
+    private Task<string> HandleSaveDeal(JObject? input, JsonSerializerSettings jsonSettings)
+    {
+        // TODO: wire to your actual DB
+        logger.LogInformation("Saving deal: {Deal}", input?.ToString());
+        return Task.FromResult(JsonConvert.SerializeObject(new { success = true }));
+    }
 
     private object GetSchemaForTool(string name) => name switch
     {
@@ -152,29 +252,5 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
         }
 
         return true; // Return true if validation passes, false otherwise
-    }
-
-    private class ChatRequest
-    {
-        [JsonPropertyName("model")]
-        public string Model { get; set; } = "claude-sonnet-4-20250514";
-
-        [JsonPropertyName("max_tokens")]
-        public int MaxTokens { get; set; } = 1024;
-
-        [JsonPropertyName("system")]
-        public string System { get; set; } = string.Empty;
-
-        [JsonPropertyName("messages")]
-        public List<Message> Messages { get; set; } = new();
-    }
-
-    private class Message
-    {
-        [JsonPropertyName("role")]
-        public string Role { get; set; } = string.Empty;
-
-        [JsonPropertyName("content")]
-        public string Content { get; set; } = string.Empty;
     }
 }

@@ -10,7 +10,7 @@ public class AgentConfig
     public string Version { get; set; } = string.Empty;
     public ModelConfig Models { get; set; } = new ModelConfig();
     public PromptConfig Prompts { get; set; } = new PromptConfig();
-    public ToolConfig ToolConfig { get; set; } = new ToolConfig();
+    public ToolConfig[] Tools { get; set; } = [];
 }
 
 

@@ -55,6 +55,7 @@ class Program
             services.AddScoped<IUserCommand, UserCommand>();
             services.Configure<AppSettings>(config);
             services.AddSingleton(agentConfig);
+            services.AddTransient<CustomMessageHandler>();
 
 
             services.AddDbContext<ApplicationDbContext>(options =>
@@ -62,9 +63,12 @@ class Program
 
             services.AddHttpClient("AiUrl", client =>
             {
-                client.BaseAddress = new Uri(config.GetValue<string>("AiAgent:BaseUrl") ?? string.Empty);
+                client.BaseAddress = new Uri(config.GetValue<string>("AiAgentSettings:BaseUrl") ?? string.Empty);
                 client.DefaultRequestHeaders.Add("User-Agent", "FindAFlight");
+                client.DefaultRequestHeaders.Add("anthropic-version", config.GetValue<string>("AiAgentSettings:anthropic-version"));
             }).AddHttpMessageHandler<CustomMessageHandler>();
+
+
         })
         .UseSerilog()
         .Build();
