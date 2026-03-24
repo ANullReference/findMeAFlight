@@ -5,6 +5,7 @@
 using System.Globalization;
 using Core.Abstractions;
 using Core.Domain;
+using Infrastructure.DatabaseRepository.Entities;
 using Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -90,7 +91,7 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 string requestBodyInString = JsonConvert.SerializeObject(requestBody, jsonSettings);
 
 
-                logger.LogInformation("Request body:\n{Body}", requestBodyInString);
+                logger.LogDebug("Request body:\n{Body}", requestBodyInString);
 
                 HttpContent httpContent = new StringContent(requestBodyInString, System.Text.Encoding.UTF8, "application/json");
 
@@ -107,7 +108,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
 
                 // Add Claude's reply to history
                 messages.Add(new Message { Role = "assistant", Content = claudeReply.Content });
-
 
                 // Check stop reason
                 if (claudeReply.StopReason == "end_turn")
@@ -171,8 +171,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
         return await Task.FromResult(-1);
     }
 
-
-
     private async Task<string> HandleSearchFlights(JObject? input, JsonSerializerSettings jsonSettings)
     {
         var refinedInput = new UserInputModel
@@ -191,11 +189,28 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             : ToonSharp.ToonSerializer.Serialize(new { error = result.Message });
     }
 
-    private Task<string> HandleSaveDeal(JObject? input, JsonSerializerSettings jsonSettings)
+    private async Task<string> HandleSaveDeal(JObject? input, JsonSerializerSettings jsonSettings)
     {
+        if (input is null)
+        {
+            return string.Empty;
+        }
+
+        string arrivalTime = input["arrival_time"]?.ToString() ?? "";
+        string departureTime = input["departure_time"]?.ToString() ?? "";
+
+
+        FlightInformation FlightInformation = new()
+        {
+            Airline = input["airline"]?.ToString() ?? "",
+            ArrivalTime = DateTime.Parse(arrivalTime),
+            DepartureTime = DateTime.Parse(departureTime),
+
+        };
+
         // TODO: wire to your actual DB
         logger.LogInformation("Saving deal: {Deal}", input?.ToString());
-        return Task.FromResult(JsonConvert.SerializeObject(new { success = true }));
+        return await Task.FromResult(JsonConvert.SerializeObject(new { success = true }));
     }
 
     private object GetSchemaForTool(string name) => name switch
@@ -224,6 +239,9 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 departure_time = new { type = "string" },
                 arrival_time = new { type = "string" },
                 stops = new { type = "number" },
+                from_airport = new { type = "string" },
+                to_airport = new { type = "string" },
+                flight_number = new { type = "string" },
                 reasoning = new { type = "string", description = "Why this is a good deal" }
             },
             required = new[] { "airline", "price", "departure_time", "arrival_time", "reasoning" }

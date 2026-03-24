@@ -23,4 +23,6 @@ public class FlightInformation
     public DateTime DepartureTimeUTC { get; set; }
     public DateTime ArrivalTimeUTC { get; set; }
     public DateTime Timestamp { get; set; }
+    public string Prompt { get; set; } = string.Empty;
+    public string Reasoning { get; set; } = string.Empty;
 }

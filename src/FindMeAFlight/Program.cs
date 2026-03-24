@@ -67,8 +67,6 @@ class Program
                 client.DefaultRequestHeaders.Add("User-Agent", "FindAFlight");
                 client.DefaultRequestHeaders.Add("anthropic-version", config.GetValue<string>("AiAgentSettings:anthropic-version"));
             }).AddHttpMessageHandler<CustomMessageHandler>();
-
-
         })
         .UseSerilog()
         .Build();

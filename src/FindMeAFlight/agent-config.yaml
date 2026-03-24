@@ -23,6 +23,9 @@ prompts:
           "stops": 0,
           "departureTime": "",
           "arrivalTime": "",
+          "from_airport": "",
+          "to_airpot": "",
+          "flight_number": "",
           "reasoning": ""
         }
       ],
