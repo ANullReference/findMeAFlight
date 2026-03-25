@@ -38,8 +38,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
 
             UserInputModel userInput = settings.ToUserinput();
 
-            int result = 0;
-
             AppSettings appSettings = options.Value;
 
             // 1. Search for flights
@@ -58,15 +56,14 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             };
 
             string flightJson = ToonSharp.ToonSerializer.Serialize(searchResult.Data);
-            //string toonSerialized = ToonSharp.ToonSerializer.Serialize(flightJson);
 
-            //todo: connect to ai agent
-            //string systemPrompt = agentConfig.Prompts.System;
 
             HttpClient client = httpClientFactory.CreateClient("AiUrl");
             ChatRequest requestBody = new();
 
-            List<Message> messages = [new() { Role = "user", Content = $"Flights in TOON data format:{flightJson}]" }];
+            //List<Message> messages = [new() { Role = "user", Content = $"Flights in TOON data format:{flightJson}]" }];
+
+            List<Message> messages = [new() { Role = "user", Content = "Can you find me cheap flights from montreal (YUL) to anywhere in japan within the next year" }];
 
             //requestBody.System = agentConfig.Prompts.System;
 
@@ -188,12 +185,25 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             return string.Empty;
         }
 
+        if (deals["best_deals"] is null)
+        {
+            return string.Empty;
+        }
+
         foreach (JObject input in deals["best_deals"].Cast<JObject>())
         {
+            DateTime departedDateTime = DateTime.MinValue;
+            DateTime arrivalDateTime = DateTime.MinValue;
+
             decimal price = 0;
-            string arrivalTime = input["arrival_time"]?.ToString() ?? "";
-            string departureTime = input["departure_time"]?.ToString() ?? "";
+            string arrivalTime = input["arrival"]?.ToString() ?? "";
+            string departureTime = input["departure"]?.ToString() ?? "";
             string reasoning = input["reasoning"]?.ToString() ?? string.Empty;
+
+
+            DateTime.TryParse(arrivalTime, out arrivalDateTime);
+
+            DateTime.TryParse(departureTime, out departedDateTime);
 
             if (input["price"] != null)
             {
@@ -207,11 +217,14 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 returnDate = result;
             }
 
+            DateTime.TryParse(arrivalTime, out arrivalDateTime);
+            DateTime.TryParse(departureTime, out departedDateTime);
+
             FlightInformation flightInformation = new()
             {
                 Airline = input["airline"]?.ToString() ?? "",
-                ArrivalTime = DateTime.Parse(arrivalTime),
-                DepartureTime = DateTime.Parse(departureTime),
+                ArrivalTime = arrivalDateTime,
+                DepartureTime = departedDateTime,
                 Timestamp = DateTime.Now,
                 Price = price,
                 Reasoning = reasoning,
@@ -223,9 +236,9 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
 
             logger.LogInformation("Saving deal: {Deal}", input?.ToString());
             await dbContext.AddAsync(flightInformation);
-            await dbContext.SaveChangesAsync();
         }
 
+        await dbContext.SaveChangesAsync();
         return await Task.FromResult(JsonConvert.SerializeObject(new { success = true }));
     }
 

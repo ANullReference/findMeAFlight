@@ -22,10 +22,11 @@ public class CustomMessageHandler(IOptions<AppSettings> options, ILogger<CustomM
        HttpRequestMessage request,
        CancellationToken cancellationToken)
     {
+        HttpResponseMessage? response = null;
         try
         {
             request.Headers.Add("x-api-key", _appSettings.AiAgentSettings.ApiKey);
-            HttpResponseMessage response = await base.SendAsync(request, cancellationToken);
+            response = await base.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             return response;
