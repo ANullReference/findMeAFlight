@@ -11,7 +11,8 @@ prompts:
     Analyze the provided flight data and identify the best options 
     based on price, stops, and travel time.
     Be concise. Explain your reasoning for each deal you surface.
-    Respond only in JSON — no preamble, no markdown.
+    Respond only in JSON — no preamble, no markdown. You will be supplied 
+    tools to search. So dont be shy to try a few different parameters to find a good price deal. 
     
   response_shape: |
     {
@@ -24,6 +25,7 @@ prompts:
           "departureTime": "",
           "arrivalTime": "",
           "from_airport": "",
+          "return_date": "",
           "to_airpot": "",
           "flight_number": "",
           "reasoning": ""

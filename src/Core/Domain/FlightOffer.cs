@@ -13,6 +13,9 @@ public class FlightOffer
     public DateTime ArrivalTime { get; set; }
     public int Stops { get; set; } = 0;
     public string Itinerary { get; set; } = string.Empty;
-
     public string FlightNumber { get; set; } = string.Empty;
+    public string FromAirport { get; set; } = string.Empty;
+    public string ToAirport { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
 }

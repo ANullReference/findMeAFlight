@@ -26,6 +26,11 @@ public class UserInput : CommandSettings
     [Description("Return date (yyyy-MM-dd) — omit for one-way")]
     public string? ReturnDate { get; set; } = string.Empty;
 
+    [CommandOption("-w|--weeks")]
+    [Description("Weeks on vacation")]
+    public int? WeeksOnvacation { get; set; } = 0;
+
+
     [CommandOption("-m|--max-price")]
     [Description("Alert threshold — only surface deals below this price")]
     public decimal MaxPrice { get; set; } = decimal.MaxValue;
@@ -36,6 +41,11 @@ public class UserInput : CommandSettings
 
     public UserInputModel ToUserinput()
     {
+        //if (WeeksOnvacation > 0)
+        //{ 
+        //    ReturnDate = 
+        //}
+
         return new UserInputModel
         {
             FromAirport = this.FromAirport,
@@ -43,7 +53,8 @@ public class UserInput : CommandSettings
             Currency = this.Currency,
             DepartureDate = this.DepartureDate,
             ReturnDate = this.ReturnDate,
-            MaxPrice = this.MaxPrice
+            MaxPrice = this.MaxPrice,
+            WeeksOnvacation = this.WeeksOnvacation ?? 0,
         };
     }
 }

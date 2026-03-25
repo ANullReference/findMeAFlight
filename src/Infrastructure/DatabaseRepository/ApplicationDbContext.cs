@@ -16,7 +16,4 @@ public class ApplicationDbContext : DbContext
     }
 
     public virtual DbSet<FlightInformation> FlightInformation { get; set; }
-    public virtual DbSet<PromptHistory> PromptHistories { get; set; }
-
-
 }

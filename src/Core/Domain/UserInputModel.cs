@@ -11,5 +11,6 @@ public class UserInputModel
     public string DepartureDate { get; set; } = string.Empty;
     public string Currency { get; set; } = "CAD";
     public string ReturnDate { get; set; } = string.Empty;
+    public int WeeksOnvacation { get; set; } = 0;
     public decimal MaxPrice { get; set; } = decimal.MaxValue;
 }

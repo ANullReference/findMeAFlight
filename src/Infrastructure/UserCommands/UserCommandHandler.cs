@@ -5,6 +5,7 @@
 using System.Globalization;
 using Core.Abstractions;
 using Core.Domain;
+using Infrastructure.DatabaseRepository;
 using Infrastructure.DatabaseRepository.Entities;
 using Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,7 @@ using Spectre.Console.Cli;
 
 namespace Infrastructure.UserCommands;
 
-public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agentConfig, ILogger<UserCommandHandler> logger, IFlightService flightService, IHttpClientFactory httpClientFactory) : AsyncCommand<UserInput>
+public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agentConfig, ILogger<UserCommandHandler> logger, IFlightService flightService, IHttpClientFactory httpClientFactory, ApplicationDbContext dbContext) : AsyncCommand<UserInput>
 {
     /// <summary>
     /// Executes the flight deal search and booking operation asynchronously using the provided command context and user
@@ -36,6 +37,7 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             ValidateArgs(settings); // just throw exceptions if validation fails, we will catch them in the main method and log them.
 
             UserInputModel userInput = settings.ToUserinput();
+
             int result = 0;
 
             AppSettings appSettings = options.Value;
@@ -72,7 +74,7 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             //requestBody.Messages = messages;
 
             // 2. Build tool list from your agentConfig YAML
-            var tools = agentConfig.Tools.Select(t => new Tool
+            List<Tool>? tools = agentConfig.Tools.Select(t => new Tool
             {
                 Name = t.Name,
                 Description = t.Description,
@@ -89,7 +91,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 };
 
                 string requestBodyInString = JsonConvert.SerializeObject(requestBody, jsonSettings);
-
 
                 logger.LogDebug("Request body:\n{Body}", requestBodyInString);
 
@@ -115,7 +116,11 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                     var finalText = claudeReply.Content
                         .Where(b => b.Type == "text")
                         .Select(b => b.Text)
-                        .FirstOrDefault();
+                        .FirstOrDefault() ?? string.Empty;
+
+                    await HandleSaveDeal((JObject)JsonConvert.DeserializeObject(finalText), raw);
+
+                    //await HandleSaveDeal(claudeReply.Content, raw)
 
                     logger.LogInformation("Claude final response:\n{Response}", finalText);
                     // TODO: deserialize finalText into your response_shape and save
@@ -131,7 +136,7 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                         string resultJson = block.Name switch
                         {
                             "search_flights" => await HandleSearchFlights(block.Input, jsonSettings),
-                            "save_deal" => await HandleSaveDeal(block.Input, jsonSettings),
+                            //"save_deal" => await HandleSaveDeal(block.Input, raw),
                             _ => JsonConvert.SerializeObject(new { error = "Unknown tool" })
                         };
 
@@ -149,19 +154,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             }
 
             return 0;
-
-
-
-
-
-            //string toolDefinition = string.Format("In Terms of tools you have the following tool: to search 1) '{0}' which uses this as a model input: '{}'", "search_flights", JsonConvert.SerializeObject(new UserInputModel()));
-
-            //todo: give him the context he will be using: You are a shrewd and avid flight finder only looking for the best deals for your customers.
-            //You have access to the following tools: 1. SearchFlights(fromAirport, toAirport) - This tool allows you to search for flights between two airports. It returns a list of flight options with details such as airline, price, and departure time. 2. BookFlight(flightOption) - This tool allows you to book a flight option that was returned by the SearchFlights tool. It requires the flight option details as input and returns a confirmation of the booking.
-
-            //todo: Your reasonning will be stored locally for a user to view why you chose certain deals. 
-
-            //todo: Then you will store the deals you find into a local database.
         }
         catch (Exception ex)
         {
@@ -189,27 +181,51 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
             : ToonSharp.ToonSerializer.Serialize(new { error = result.Message });
     }
 
-    private async Task<string> HandleSaveDeal(JObject? input, JsonSerializerSettings jsonSettings)
+    private async Task<string> HandleSaveDeal(JObject? deals, string prompt)
     {
-        if (input is null)
+        if (deals is null)
         {
             return string.Empty;
         }
 
-        string arrivalTime = input["arrival_time"]?.ToString() ?? "";
-        string departureTime = input["departure_time"]?.ToString() ?? "";
-
-
-        FlightInformation FlightInformation = new()
+        foreach (JObject input in deals["best_deals"].Cast<JObject>())
         {
-            Airline = input["airline"]?.ToString() ?? "",
-            ArrivalTime = DateTime.Parse(arrivalTime),
-            DepartureTime = DateTime.Parse(departureTime),
+            decimal price = 0;
+            string arrivalTime = input["arrival_time"]?.ToString() ?? "";
+            string departureTime = input["departure_time"]?.ToString() ?? "";
+            string reasoning = input["reasoning"]?.ToString() ?? string.Empty;
 
-        };
+            if (input["price"] != null)
+            {
+                decimal.TryParse(input["price"]?.ToString(), out price);
+            }
 
-        // TODO: wire to your actual DB
-        logger.LogInformation("Saving deal: {Deal}", input?.ToString());
+            DateTime? returnDate = null;
+
+            if (input["return_date"] is not null && DateTime.TryParse(input["return_date"].ToString(), out DateTime result))
+            {
+                returnDate = result;
+            }
+
+            FlightInformation flightInformation = new()
+            {
+                Airline = input["airline"]?.ToString() ?? "",
+                ArrivalTime = DateTime.Parse(arrivalTime),
+                DepartureTime = DateTime.Parse(departureTime),
+                Timestamp = DateTime.Now,
+                Price = price,
+                Reasoning = reasoning,
+                Prompt = prompt,
+                DepartureAirport = input["from_airport"]?.ToString() ?? string.Empty,
+                ArrivalAirport = input["to_airport"]?.ToString() ?? string.Empty,
+                ReturnDate = returnDate
+            };
+
+            logger.LogInformation("Saving deal: {Deal}", input?.ToString());
+            await dbContext.AddAsync(flightInformation);
+            await dbContext.SaveChangesAsync();
+        }
+
         return await Task.FromResult(JsonConvert.SerializeObject(new { success = true }));
     }
 
@@ -228,23 +244,6 @@ public class UserCommandHandler(IOptions<AppSettings> options, AgentConfig agent
                 max_price = new { type = "number", description = "Maximum price filter" }
             },
             required = new[] { "from_airport", "to_airport", "departure_date" }
-        },
-        "save_deal" => new
-        {
-            type = "object",
-            properties = new
-            {
-                airline = new { type = "string" },
-                price = new { type = "number" },
-                departure_time = new { type = "string" },
-                arrival_time = new { type = "string" },
-                stops = new { type = "number" },
-                from_airport = new { type = "string" },
-                to_airport = new { type = "string" },
-                flight_number = new { type = "string" },
-                reasoning = new { type = "string", description = "Why this is a good deal" }
-            },
-            required = new[] { "airline", "price", "departure_time", "arrival_time", "reasoning" }
         },
         _ => new { type = "object", properties = new { } }
     };

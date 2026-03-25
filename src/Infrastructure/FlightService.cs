@@ -23,6 +23,12 @@ public class FlightService(IOptions<AppSettings> options, ILogger<FlightService>
             input.DepartureDate = DateTime.Now.ToString("yyyy-MM-dd");
         }
 
+        if (input.WeeksOnvacation > 0)
+        {
+            input.ReturnDate = DateTime.Parse(input.DepartureDate).AddDays(7 * input.WeeksOnvacation).ToString("yyyy-MM-dd");
+        }
+
+
         Hashtable ht = new()
             {
                 { "engine", "google_flights" },
@@ -62,19 +68,27 @@ public class FlightService(IOptions<AppSettings> options, ILogger<FlightService>
             {
                 foreach (var flight in bestFlight.flights)
                 {
+                    Layover[]? layovers = [];
+
+                    if (bestFlight.layovers is not null)
+                    {
+                        layovers = bestFlight.layovers;
+                    }
+
                     FlightOffer fo = new()
                     {
                         Price = bestFlight.price,
                         Airline = flight.airline,
                         FlightNumber = flight.flight_number,
-                        Stops = bestFlight.layovers.Length,
+                        Stops = layovers.Length,
                         Currency = "CAD",
-                        Itinerary = Newtonsoft.Json.JsonConvert.SerializeObject(bestFlight.layovers),
+                        Itinerary = Newtonsoft.Json.JsonConvert.SerializeObject(layovers),
                         ArrivalTime = DateTime.Parse(flight.arrival_airport.time),
-                        DepartureTime = DateTime.Parse(flight.departure_airport.time)
-                        //DepartureTime = bestFlight.
+                        DepartureTime = DateTime.Parse(flight.departure_airport.time),
+                        FromAirport = input.FromAirport,
+                        ToAirport = input.ToAirport,
+                        Description = string.Join($"{Environment.NewLine}", flight.extensions)
                     };
-
 
                     flightOffer.Add(fo);
                 }
